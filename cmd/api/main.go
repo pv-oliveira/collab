@@ -43,6 +43,8 @@ func main() {
 	protected.Use(middleware.AuthMiddleware(cfg.JWTSecret))
 
 	protected.POST("/documents", handler.Create)
+	protected.GET("/documents/:id", handler.Get)
+	protected.PUT("/documents/:id", handler.Update)
 
 	r.Run(":8080")
 }
