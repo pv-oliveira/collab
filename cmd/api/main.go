@@ -10,9 +10,11 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load()
 	cfg := config.Load()
 
 	database, err := db.Connect(cfg.DBUrl)
