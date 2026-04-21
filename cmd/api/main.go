@@ -44,6 +44,7 @@ func main() {
 
 	protected.POST("/documents", handler.Create)
 	protected.GET("/documents/:id", handler.Get)
+	protected.GET("/documents", handler.List)
 	protected.PUT("/documents/:id", handler.Update)
 
 	r.Run(":8080")

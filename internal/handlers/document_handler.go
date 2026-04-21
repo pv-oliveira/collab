@@ -67,3 +67,15 @@ func (h *DocumentHandler) Get(c *gin.Context) {
 
 	c.JSON(200, doc)
 }
+
+func (h *DocumentHandler) List(c *gin.Context) {
+	userID := c.GetString("userID")
+
+	docs, err := h.Service.ListByUser(userID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "not found"})
+		return
+	}
+
+	c.JSON(200, docs)
+}

@@ -29,6 +29,10 @@ func (s *DocumentService) GetByID(userID, docID string) (*models.Document, error
 	return s.Repo.FindByIDAndUser(docID, userID)
 }
 
+func (s *DocumentService) ListByUser(userID string) ([]*models.Document, error) {
+	return s.Repo.FindByUser(userID)
+}
+
 func (s *DocumentService) Update(userID, docID, title, content string) (*models.Document, error) {
 	doc, err := s.Repo.FindByIDAndUser(docID, userID)
 	if err != nil {

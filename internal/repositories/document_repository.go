@@ -52,3 +52,26 @@ func (r *DocumentRepository) FindByIDAndUser(id, userID string) (*models.Documen
 	err := row.Scan(&doc.ID, &doc.UserID, &doc.Title, &doc.Content, &doc.CreatedAt, &doc.UpdatedAt)
 	return &doc, err
 }
+
+func (r *DocumentRepository) FindByUser(userID string) ([]*models.Document, error) {
+	var documents []*models.Document
+	query := `SELECT id, user_id, title, content, created_at, updated_at
+         FROM documents WHERE user_id=$1`
+	rows, err := r.DB.Query(query, userID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var doc models.Document
+		err = rows.Scan(&doc.ID, &doc.UserID, &doc.Title, &doc.Content, &doc.CreatedAt, &doc.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		documents = append(documents, &doc)
+	}
+
+	return documents, nil
+}
