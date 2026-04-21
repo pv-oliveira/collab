@@ -4,6 +4,7 @@ import (
 	"apis/internal/config"
 	"apis/internal/db"
 	"apis/internal/handlers"
+	"apis/internal/middleware"
 	"apis/internal/repositories"
 	"apis/internal/services"
 	"log"
@@ -25,7 +26,21 @@ func main() {
 
 	r := gin.Default()
 
-	r.POST("/documents", handler.Create)
+	authRepo := &repositories.UserRepository{DB: database}
+	authService := &services.AuthService{
+		Repo:      authRepo,
+		JWTSecret: cfg.JWTSecret,
+	}
+	authHandler := &handlers.AuthHandler{Service: authService}
+
+	r.POST("/auth/register", authHandler.Register)
+	r.POST("/auth/login", authHandler.Login)
+
+	// Rotas protegidas
+	protected := r.Group("/")
+	protected.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+
+	protected.POST("/documents", handler.Create)
 
 	r.Run(":8080")
 }
