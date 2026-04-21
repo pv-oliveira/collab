@@ -12,9 +12,10 @@ type DocumentService struct {
 	Repo *repositories.DocumentRepository
 }
 
-func (s *DocumentService) Create(title string) (*models.Document, error) {
+func (s *DocumentService) Create(userID, title string) (*models.Document, error) {
 	document := &models.Document{
 		ID:        uuid.New().String(),
+		UserID:    userID,
 		Title:     title,
 		Content:   "TESTE",
 		CreatedAt: time.Now(),
@@ -22,4 +23,21 @@ func (s *DocumentService) Create(title string) (*models.Document, error) {
 	}
 
 	return document, s.Repo.Create(document)
+}
+
+func (s *DocumentService) GetByID(userID, docID string) (*models.Document, error) {
+	return s.Repo.FindByIDAndUser(docID, userID)
+}
+
+func (s *DocumentService) Update(userID, docID, title, content string) (*models.Document, error) {
+	doc, err := s.Repo.FindByIDAndUser(docID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	doc.Title = title
+	doc.Content = content
+	doc.UpdatedAt = time.Now()
+
+	return doc, s.Repo.Update(doc)
 }
