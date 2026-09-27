@@ -44,3 +44,29 @@ func TestCheckOriginEmptyListBlocksBrowsers(t *testing.T) {
 		t.Error("sem ALLOWED_ORIGINS, nenhum navegador deveria conectar")
 	}
 }
+
+func TestTokenFromSubprotocol(t *testing.T) {
+	tests := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{"com token", "access_token, abc.def.ghi", "abc.def.ghi"},
+		{"sem token", "access_token", ""},
+		{"ordem trocada", "abc.def.ghi, access_token", ""},
+		{"outro subprotocolo antes", "chat, access_token, abc.def.ghi", "abc.def.ghi"},
+		{"sem header", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/documents/1/ws", nil)
+			if tt.header != "" {
+				r.Header.Set("Sec-WebSocket-Protocol", tt.header)
+			}
+			if got := tokenFromSubprotocol(r); got != tt.want {
+				t.Errorf("header %q: got %q, want %q", tt.header, got, tt.want)
+			}
+		})
+	}
+}
