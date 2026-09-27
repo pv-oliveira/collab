@@ -91,3 +91,11 @@ jobs:
       # Falha só com vulnerabilidades que o código de fato alcança.
       # v1.7.0 é a última que compila com Go 1.25 (v1.8.0 exige 1.26, ver #13).
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+
+  # Garante que a imagem compila e o compose é válido; publicar fica para o CD.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t collab-api:ci .
+      - run: docker compose config --quiet
