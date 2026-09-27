@@ -72,6 +72,17 @@ Sobe Postgres, Redis, aplica as migrations e inicia **duas réplicas** da API:
 As duas réplicas compartilham Postgres e Redis: uma edição enviada por WebSocket à réplica 1 chega aos clientes conectados na réplica 2.
 `JWT_SECRET` e `ALLOWED_ORIGINS` podem ser definidos no `.env`; sem eles, valem valores de desenvolvimento.
 
+### Imagem publicada
+
+Cada merge na `main` publica a imagem no GitHub Container Registry, com as tags `latest` e `sha-<commit>` (imutável, para deploy e rollback):
+
+```sh
+docker pull ghcr.io/pv-oliveira/collab:latest
+docker run -p 8080:8080 \
+  -e DATABASE_URL=... -e REDIS_URL=... -e JWT_SECRET=... -e ALLOWED_ORIGINS=... \
+  ghcr.io/pv-oliveira/collab:latest
+```
+
 ### Sem Docker
 
 ```sh
