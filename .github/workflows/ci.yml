@@ -43,4 +43,5 @@ jobs:
         with:
           go-version-file: go.mod
       # Falha só com vulnerabilidades que o código de fato alcança.
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      # v1.7.0 é a última que compila com Go 1.25 (v1.8.0 exige 1.26, ver #13).
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
