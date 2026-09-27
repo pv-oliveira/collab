@@ -20,14 +20,6 @@ func (r *DocumentRepository) Create(document *models.Document) error {
 	return nil
 }
 
-func (r *DocumentRepository) FindByID(id string) (*models.Document, error) {
-	query := `SELECT id, title, content, created_at, updated_at FROM documents WHERE id = $1`
-
-	var document models.Document
-	err := r.DB.QueryRow(query, id).Scan(&document.ID, &document.Title, &document.Content, &document.CreatedAt, &document.UpdatedAt)
-	return &document, err
-}
-
 func (r *DocumentRepository) Update(doc *models.Document) error {
 	query := `UPDATE documents SET title=$1, content=$2, updated_at=$3 WHERE id=$4 AND user_id=$5`
 	_, err := r.DB.Exec(
