@@ -16,7 +16,8 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	// .env é opcional: em Docker/produção as variáveis vêm do ambiente.
+	_ = godotenv.Load()
 	cfg := config.Load()
 
 	database, err := db.Connect(cfg.DBUrl)

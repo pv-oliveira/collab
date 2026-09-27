@@ -19,7 +19,7 @@ type WebsocketClient struct {
 func (c *WebsocketClient) ReadPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		_ = c.conn.Close() // conexão já está encerrando; erro aqui não muda nada
 	}()
 
 	for {
@@ -42,7 +42,7 @@ func (c *WebsocketClient) ReadPump() {
 func (c *WebsocketClient) WritePump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	for msg := range c.send {
