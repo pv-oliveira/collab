@@ -35,6 +35,34 @@ jobs:
         with:
           version: v2.14.0
 
+  # Prova que as migrations aplicam e desfazem sem erro num Postgres real.
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: collab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/collab?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
+      - run: migrate -path migrations -database "$DATABASE_URL" up
+      - run: migrate -path migrations -database "$DATABASE_URL" down -all
+      - run: migrate -path migrations -database "$DATABASE_URL" up
+
   govulncheck:
     runs-on: ubuntu-latest
     steps:
