@@ -11,6 +11,7 @@ Go · Gin · PostgreSQL (`lib/pq`) · JWT (`golang-jwt`) · WebSocket (`gorilla/
 
 ```
 cmd/api/            → entrypoint: config, injeção de dependências e rotas
+migrations/         → schema do banco versionado (golang-migrate)
 internal/
   config/           → configuração via variáveis de ambiente
   db/               → conexão com PostgreSQL
@@ -37,10 +38,26 @@ O fluxo segue `handler → service → repository`: o handler só trata HTTP, o 
 | GET | `/documents/:id` | JWT |
 | PUT | `/documents/:id` | JWT |
 
+## Banco de dados
+
+O schema fica versionado em `migrations/` e é aplicado com o [golang-migrate](https://github.com/golang-migrate/migrate):
+
+```sh
+go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
+
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab?sslmode=disable"
+migrate -path migrations -database "$DATABASE_URL" up        # aplica as pendentes
+migrate -path migrations -database "$DATABASE_URL" down 1    # desfaz a última
+migrate create -ext sql -dir migrations -seq nome_da_mudanca # cria uma nova
+```
+
+O CI roda `up → down → up` num Postgres real a cada PR.
+
 ## Como rodar
 
 ```sh
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab?sslmode=disable"
+export REDIS_URL="redis://localhost:6379"
 export JWT_SECRET="troque-isto"
 go run ./cmd/api
 ```
@@ -48,8 +65,8 @@ go run ./cmd/api
 A API sobe em `http://localhost:8080`.
 
 ## Próximos passos
-- [ ] Expor a rota WebSocket `/documents/:id/ws`
-- [ ] Migrations do banco
+- [x] Expor a rota WebSocket `/documents/:id/ws`
+- [x] Migrations do banco
 - [ ] Testes do hub e dos services
 - [ ] Dockerfile + docker-compose
-- [ ] CI com GitHub Actions
+- [x] CI com GitHub Actions
