@@ -64,7 +64,7 @@ func main() {
 	go func() {
 		log.Fatal("ws hub: ", hub.Run(ctx))
 	}()
-	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, cfg.JWTSecret).Handle)
+	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, cfg.JWTSecret, cfg.AllowedOrigins).Handle)
 
 	log.Fatal(r.Run(":8080"))
 }
