@@ -7,6 +7,8 @@ import (
 	"apis/internal/middleware"
 	"apis/internal/repositories"
 	"apis/internal/services"
+	"apis/internal/ws"
+	"context"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -46,6 +48,22 @@ func main() {
 	protected.GET("/documents/:id", handler.Get)
 	protected.GET("/documents", handler.List)
 	protected.PUT("/documents/:id", handler.Update)
+
+	// WebSocket: fora do grupo protegido porque o token vem no subprotocolo,
+	// e não no header Authorization (o próprio handler valida).
+	if cfg.RedisURL == "" {
+		log.Fatal("REDIS_URL is required")
+	}
+	ctx := context.Background()
+	bus, err := ws.NewRedisBus(ctx, cfg.RedisURL)
+	if err != nil {
+		log.Fatal("redis: ", err)
+	}
+	hub := ws.NewHub(bus)
+	go func() {
+		log.Fatal("ws hub: ", hub.Run(ctx))
+	}()
+	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, cfg.JWTSecret).Handle)
 
 	r.Run(":8080")
 }

@@ -1,34 +1,58 @@
 package ws
 
-import "sync"
+import (
+	"context"
+	"log"
+)
 
-type Message struct {
+type Event struct {
 	DocumentID string `json:"document_id"`
 	UserID     string `json:"user_id"`
-	Type       string `json:"type"` // "edit"
-	Content    string `json:"content"`
+	SenderID   string `json:"sender_id"` // id da conexão que enviou
+	Type       string `json:"type"`
+	Payload    string `json:"payload"`
+	Timestamp  int64  `json:"timestamp"`
 }
+
+// Hub guarda as conexões desta instância. Só a goroutine do Run toca no mapa
+// clients; as outras goroutines conversam com ela pelos canais.
 type Hub struct {
 	clients    map[string]map[*WebsocketClient]bool
 	register   chan *WebsocketClient
 	unregister chan *WebsocketClient
-	broadcast  chan Message
-	mu         sync.Mutex
+	broadcast  chan Event
+
+	bus *RedisBus
 }
 
-func NewHub() *Hub {
+func NewHub(bus *RedisBus) *Hub {
 	return &Hub{
 		clients:    make(map[string]map[*WebsocketClient]bool),
 		register:   make(chan *WebsocketClient),
 		unregister: make(chan *WebsocketClient),
-		broadcast:  make(chan Message),
+		broadcast:  make(chan Event),
+		bus:        bus,
 	}
 }
 
-func (h *Hub) Run() {
+// Publish envia o evento só para o Redis. A entrega acontece quando ele volta
+// pela inscrição, inclusive nesta instância: um único caminho, sem duplicar.
+func (h *Hub) Publish(ctx context.Context, event Event) {
+	if err := h.bus.Publish(ctx, event); err != nil {
+		log.Println("ws: falha ao publicar no redis:", err)
+	}
+}
+
+func (h *Hub) Run(ctx context.Context) error {
+	err := h.bus.Subscribe(ctx, func(event Event) {
+		h.broadcast <- event
+	})
+	if err != nil {
+		return err
+	}
+
 	for {
 		select {
-
 		case client := <-h.register:
 			if _, ok := h.clients[client.documentID]; !ok {
 				h.clients[client.documentID] = make(map[*WebsocketClient]bool)
@@ -36,6 +60,7 @@ func (h *Hub) Run() {
 			h.clients[client.documentID][client] = true
 
 		case client := <-h.unregister:
+			// ReadPump e WritePump chamam unregister: só fecha na primeira vez.
 			if clients, ok := h.clients[client.documentID]; ok {
 				if _, exists := clients[client]; exists {
 					delete(clients, client)
@@ -43,23 +68,27 @@ func (h *Hub) Run() {
 				}
 			}
 
-		case msg := <-h.broadcast:
-			if clients, ok := h.clients[msg.DocumentID]; ok {
-				for client := range clients {
+		case event := <-h.broadcast:
+			h.broadcastLocal(event)
+		}
+	}
+}
 
-					// não manda pra quem enviou
-					if client.userID == msg.UserID {
-						continue
-					}
+func (h *Hub) broadcastLocal(event Event) {
+	clients := h.clients[event.DocumentID]
 
-					select {
-					case client.send <- []byte(msg.Content):
-					default:
-						close(client.send)
-						delete(clients, client)
-					}
-				}
-			}
+	for client := range clients {
+		// não manda de volta para a conexão que enviou
+		if client.id == event.SenderID {
+			continue
+		}
+
+		select {
+		case client.send <- []byte(event.Payload):
+		default:
+			// cliente lento: buffer cheio, desconecta
+			close(client.send)
+			delete(clients, client)
 		}
 	}
 }
