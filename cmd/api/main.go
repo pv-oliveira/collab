@@ -7,6 +7,8 @@ import (
 	"apis/internal/middleware"
 	"apis/internal/repositories"
 	"apis/internal/services"
+	"apis/internal/ws"
+	"context"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +16,8 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	// .env é opcional: em Docker/produção as variáveis vêm do ambiente.
+	_ = godotenv.Load()
 	cfg := config.Load()
 
 	database, err := db.Connect(cfg.DBUrl)
@@ -47,5 +50,21 @@ func main() {
 	protected.GET("/documents", handler.List)
 	protected.PUT("/documents/:id", handler.Update)
 
-	r.Run(":8080")
+	// WebSocket: fora do grupo protegido porque o token vem no subprotocolo,
+	// e não no header Authorization (o próprio handler valida).
+	if cfg.RedisURL == "" {
+		log.Fatal("REDIS_URL is required")
+	}
+	ctx := context.Background()
+	bus, err := ws.NewRedisBus(ctx, cfg.RedisURL)
+	if err != nil {
+		log.Fatal("redis: ", err)
+	}
+	hub := ws.NewHub(bus)
+	go func() {
+		log.Fatal("ws hub: ", hub.Run(ctx))
+	}()
+	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, cfg.JWTSecret).Handle)
+
+	log.Fatal(r.Run(":8080"))
 }

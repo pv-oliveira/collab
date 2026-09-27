@@ -62,7 +62,7 @@ func (r *DocumentRepository) FindByUser(userID string) ([]*models.Document, erro
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var doc models.Document

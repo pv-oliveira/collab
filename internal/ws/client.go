@@ -1,10 +1,14 @@
 package ws
 
 import (
+	"context"
+	"time"
+
 	"github.com/gorilla/websocket"
 )
 
 type WebsocketClient struct {
+	id         string
 	conn       *websocket.Conn
 	send       chan []byte
 	userID     string
@@ -15,7 +19,7 @@ type WebsocketClient struct {
 func (c *WebsocketClient) ReadPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		_ = c.conn.Close() // conexão já está encerrando; erro aqui não muda nada
 	}()
 
 	for {
@@ -24,21 +28,21 @@ func (c *WebsocketClient) ReadPump() {
 			break
 		}
 
-		message := Message{
+		c.hub.Publish(context.Background(), Event{
 			DocumentID: c.documentID,
 			UserID:     c.userID,
+			SenderID:   c.id,
 			Type:       "edit",
-			Content:    string(msg),
-		}
-
-		c.hub.broadcast <- message
+			Payload:    string(msg),
+			Timestamp:  time.Now().Unix(),
+		})
 	}
 }
 
 func (c *WebsocketClient) WritePump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 
 	for msg := range c.send {
