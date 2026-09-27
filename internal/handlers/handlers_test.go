@@ -127,3 +127,42 @@ func TestDocumentHandlersEnforceOwnership(t *testing.T) {
 		t.Errorf("listagem de outro usuário contém o documento: %s", w.Body)
 	}
 }
+
+func TestDocumentHandlersErrors(t *testing.T) {
+	db := testutil.DB(t)
+	r := newRouter(db)
+
+	t.Run("usuário sem documentos recebe []", func(t *testing.T) {
+		user := testutil.CreateUser(t, db)
+		token, _ := middleware.GenerateToken(secret, user.ID)
+		w := do(t, r, http.MethodGet, "/documents", token, nil)
+		if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "[]" {
+			t.Errorf("status %d, body %s; esperava 200 e []", w.Code, w.Body)
+		}
+	})
+
+	t.Run("criar para usuário inexistente não retorna 201", func(t *testing.T) {
+		token, _ := middleware.GenerateToken(secret, uuid.NewString()) // token válido, usuário não existe
+		w := do(t, r, http.MethodPost, "/documents", token, map[string]string{"title": "x"})
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("status %d, esperava 500 (body %s)", w.Code, w.Body)
+		}
+		if strings.Contains(w.Body.String(), "pq:") {
+			t.Errorf("vazou erro do Postgres: %s", w.Body)
+		}
+	})
+
+	t.Run("erro no banco ao listar responde internal error", func(t *testing.T) {
+		broken, err := sql.Open("postgres", "postgres://u:p@127.0.0.1:1/x?sslmode=disable")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = broken.Close() })
+		token, _ := middleware.GenerateToken(secret, uuid.NewString())
+
+		w := do(t, newRouter(broken), http.MethodGet, "/documents", token, nil)
+		if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), "internal error") {
+			t.Errorf("status %d, body %s; esperava 500 com internal error", w.Code, w.Body)
+		}
+	})
+}

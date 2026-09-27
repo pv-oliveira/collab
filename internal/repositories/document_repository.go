@@ -17,7 +17,7 @@ func (r *DocumentRepository) Create(document *models.Document) error {
 	if err != nil {
 		fmt.Println("Error inserting document:", err.Error())
 	}
-	return nil
+	return err
 }
 
 func (r *DocumentRepository) Update(doc *models.Document) error {
@@ -46,7 +46,7 @@ func (r *DocumentRepository) FindByIDAndUser(id, userID string) (*models.Documen
 }
 
 func (r *DocumentRepository) FindByUser(userID string) ([]*models.Document, error) {
-	var documents []*models.Document
+	documents := []*models.Document{} // vazia, não nil: vira [] no JSON
 	query := `SELECT id, user_id, title, content, created_at, updated_at
          FROM documents WHERE user_id=$1`
 	rows, err := r.DB.Query(query, userID)
@@ -63,6 +63,10 @@ func (r *DocumentRepository) FindByUser(userID string) ([]*models.Document, erro
 			return nil, err
 		}
 		documents = append(documents, &doc)
+	}
+	// rows.Next() também para em erro (ex.: conexão caiu no meio da leitura).
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return documents, nil
