@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Toda segunda, 09:00 UTC: pega vulnerabilidades publicadas mesmo sem PR.
+  schedule:
+    - cron: "0 9 * * 1"
 
 # O GITHUB_TOKEN deste workflow só pode ler o repositório.
 permissions:
@@ -31,3 +34,13 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # Falha só com vulnerabilidades que o código de fato alcança.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
