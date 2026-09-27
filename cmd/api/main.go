@@ -16,7 +16,8 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	// .env é opcional: em Docker/produção as variáveis vêm do ambiente.
+	_ = godotenv.Load()
 	cfg := config.Load()
 
 	database, err := db.Connect(cfg.DBUrl)
@@ -65,5 +66,5 @@ func main() {
 	}()
 	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, cfg.JWTSecret).Handle)
 
-	r.Run(":8080")
+	log.Fatal(r.Run(":8080"))
 }
