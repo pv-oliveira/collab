@@ -89,14 +89,23 @@ jobs:
         with:
           go-version-file: go.mod
       # Falha só com vulnerabilidades que o código de fato alcança.
-      # v1.7.0 é a última que compila com Go 1.25 (v1.8.0 exige 1.26, ver #13).
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   # Garante que a imagem compila e o compose é válido; publicar fica para o CD.
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # A versão do Go aparece no go.mod e no Dockerfile; divergência = CI e imagem diferentes.
+      - name: Go do Dockerfile igual ao do go.mod
+        run: |
+          mod=$(awk '/^go /{print $2}' go.mod)
+          img=$(sed -nE 's/^FROM golang:([0-9.]+)-alpine.*/\1/p' Dockerfile)
+          if [ "$mod" != "$img" ]; then
+            echo "::error file=Dockerfile::Go do Dockerfile ($img) diferente do go.mod ($mod)"
+            exit 1
+          fi
+          echo "Go $mod em ambos"
       - run: docker build -t collab-api:ci .
       - run: docker compose config --quiet
 

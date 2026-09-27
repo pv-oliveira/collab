@@ -1,5 +1,5 @@
 # Estágio 1: compila. Imagem grande (Go completo), usada só no build.
-# A versão do Go precisa acompanhar o go.mod.
+# A versão do Go precisa acompanhar o go.mod (o CI falha se divergirem).
 FROM golang:1.26.8-alpine AS build
 WORKDIR /src
 
