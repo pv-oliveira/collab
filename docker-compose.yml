@@ -1,0 +1,68 @@
+# Ambiente completo: docker compose up
+# Ordem: postgres saudável → migrate aplica e termina → api-1 e api-2 sobem.
+
+x-api: &api
+  build: .
+  image: collab-api
+  environment:
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432/collab?sslmode=disable
+    REDIS_URL: redis://redis:6379
+    JWT_SECRET: ${JWT_SECRET:-dev-only-secret}
+    ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: collab
+    ports:
+      - "5433:5432" # 5433 no host: a 5432 costuma estar ocupada por um Postgres local
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d collab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate:v4.20.1
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://postgres:postgres@postgres:5432/collab?sslmode=disable
+      - up
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Duas réplicas no mesmo Postgres e Redis: uma edição feita numa chega na
+  # outra pelo Redis Pub/Sub.
+  api-1:
+    <<: *api
+    ports:
+      - "8080:8080"
+
+  api-2:
+    <<: *api
+    ports:
+      - "8081:8080"
+
+volumes:
+  pgdata:

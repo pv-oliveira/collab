@@ -1,0 +1,10 @@
+# Fora do contexto de build: segredos, metadados e o que não vai para a imagem.
+.git
+.github
+.idea
+.env
+.env.*
+*.md
+Dockerfile
+docker-compose.yml
+migrations
