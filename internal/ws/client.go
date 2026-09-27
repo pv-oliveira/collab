@@ -1,10 +1,14 @@
 package ws
 
 import (
+	"context"
+	"time"
+
 	"github.com/gorilla/websocket"
 )
 
 type WebsocketClient struct {
+	id         string
 	conn       *websocket.Conn
 	send       chan []byte
 	userID     string
@@ -24,14 +28,14 @@ func (c *WebsocketClient) ReadPump() {
 			break
 		}
 
-		message := Message{
+		c.hub.Publish(context.Background(), Event{
 			DocumentID: c.documentID,
 			UserID:     c.userID,
+			SenderID:   c.id,
 			Type:       "edit",
-			Content:    string(msg),
-		}
-
-		c.hub.broadcast <- message
+			Payload:    string(msg),
+			Timestamp:  time.Now().Unix(),
+		})
 	}
 }
 
