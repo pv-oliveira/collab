@@ -1,6 +1,6 @@
 module apis
 
-go 1.25.13
+go 1.26.8
 
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
