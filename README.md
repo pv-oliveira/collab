@@ -55,6 +55,25 @@ O CI roda `up → down → up` num Postgres real a cada PR.
 
 ## Como rodar
 
+### Com Docker (recomendado)
+
+```sh
+docker compose up --build
+```
+
+Sobe Postgres, Redis, aplica as migrations e inicia **duas réplicas** da API:
+
+| Serviço | Endereço |
+|---|---|
+| API réplica 1 | `http://localhost:8080` |
+| API réplica 2 | `http://localhost:8081` |
+| Postgres | `localhost:5433` (usuário e senha `postgres`, banco `collab`) |
+
+As duas réplicas compartilham Postgres e Redis: uma edição enviada por WebSocket à réplica 1 chega aos clientes conectados na réplica 2.
+`JWT_SECRET` e `ALLOWED_ORIGINS` podem ser definidos no `.env`; sem eles, valem valores de desenvolvimento.
+
+### Sem Docker
+
 ```sh
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab?sslmode=disable"
 export REDIS_URL="redis://localhost:6379"
@@ -77,6 +96,6 @@ Os testes de integração usam um banco separado (`collab_test`) com as migratio
 ## Próximos passos
 - [x] Expor a rota WebSocket `/documents/:id/ws`
 - [x] Migrations do banco
-- [ ] Testes do hub e dos services
-- [ ] Dockerfile + docker-compose
+- [x] Testes do hub e dos services
+- [x] Dockerfile + docker-compose
 - [x] CI com GitHub Actions
