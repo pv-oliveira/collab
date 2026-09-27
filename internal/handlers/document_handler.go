@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"apis/internal/services"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,8 @@ func (h *DocumentHandler) Create(c *gin.Context) {
 
 	doc, err := h.Service.Create(userID, body.Title)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Println("create document:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -73,7 +75,8 @@ func (h *DocumentHandler) List(c *gin.Context) {
 
 	docs, err := h.Service.ListByUser(userID)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "not found"})
+		log.Println("list documents:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
