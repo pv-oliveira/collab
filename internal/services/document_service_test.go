@@ -1,34 +1,14 @@
 package services
 
 import (
-	"apis/internal/models"
 	"apis/internal/repositories"
-	"database/sql"
-	"os"
+	"apis/internal/testutil"
 	"testing"
-	"time"
-
-	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 )
 
 func TestDocumentServiceCreateStartsEmpty(t *testing.T) {
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL não definido: pulando teste de integração")
-	}
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	// Documento precisa de um dono (FK); o CASCADE apaga o documento junto.
-	user := &models.User{ID: uuid.NewString(), Email: uuid.NewString() + "@test.dev", Password: "hash", CreatedAt: time.Now()}
-	if err := (&repositories.UserRepository{DB: db}).Create(user); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM users WHERE id = $1`, user.ID) })
+	db := testutil.DB(t)
+	user := testutil.CreateUser(t, db)
 
 	svc := &DocumentService{Repo: &repositories.DocumentRepository{DB: db}}
 	doc, err := svc.Create(user.ID, "Novo")
@@ -37,5 +17,38 @@ func TestDocumentServiceCreateStartsEmpty(t *testing.T) {
 	}
 	if doc.Content != "" {
 		t.Errorf("conteúdo inicial = %q, esperava vazio", doc.Content)
+	}
+}
+
+func TestDocumentServiceUpdateRespectsOwner(t *testing.T) {
+	db := testutil.DB(t)
+	owner := testutil.CreateUser(t, db)
+	intruder := testutil.CreateUser(t, db)
+	svc := &DocumentService{Repo: &repositories.DocumentRepository{DB: db}}
+
+	doc, err := svc.Create(owner.ID, "Original")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.Update(owner.ID, doc.ID, "Do dono", "ok"); err != nil {
+		t.Fatalf("dono não conseguiu editar: %v", err)
+	}
+
+	if _, err := svc.Update(intruder.ID, doc.ID, "Invadido", "hack"); err == nil {
+		t.Fatal("outro usuário conseguiu editar o documento")
+	}
+
+	// Além do erro, garante que nada foi gravado.
+	got, err := svc.GetByID(owner.ID, doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "Do dono" || got.Content != "ok" {
+		t.Errorf("documento alterado por outro usuário: title=%q content=%q", got.Title, got.Content)
+	}
+
+	if _, err := svc.GetByID(intruder.ID, doc.ID); err == nil {
+		t.Error("outro usuário conseguiu ler o documento")
 	}
 }
