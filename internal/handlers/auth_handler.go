@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"apis/internal/models"
 	"apis/internal/services"
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -23,8 +26,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	user, err := h.Service.Register(body.Email, body.Password)
+	if errors.Is(err, models.ErrEmailTaken) {
+		c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+		return
+	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Println("register:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
