@@ -17,14 +17,15 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 {
+		// Esquema "Bearer" sem diferenciar maiúsculas (RFC 6750).
+		scheme, token, ok := strings.Cut(authHeader, " ")
+		if !ok || !strings.EqualFold(scheme, "Bearer") || token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token format"})
 			c.Abort()
 			return
 		}
 
-		userID, err := ParseToken(secret, parts[1])
+		userID, err := ParseToken(secret, token)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			c.Abort()
