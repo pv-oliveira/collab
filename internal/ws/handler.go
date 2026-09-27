@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,18 +22,38 @@ type WSHandler struct {
 	hub       *Hub
 	docs      *services.DocumentService
 	jwtSecret string
+	upgrader  websocket.Upgrader
 }
 
-func NewWSHandler(hub *Hub, docs *services.DocumentService, jwtSecret string) *WSHandler {
-	return &WSHandler{hub: hub, docs: docs, jwtSecret: jwtSecret}
+func NewWSHandler(hub *Hub, docs *services.DocumentService, jwtSecret string, allowedOrigins []string) *WSHandler {
+	return &WSHandler{
+		hub:       hub,
+		docs:      docs,
+		jwtSecret: jwtSecret,
+		upgrader: websocket.Upgrader{
+			// O servidor precisa devolver um dos subprotocolos pedidos, senão o navegador fecha a conexão.
+			Subprotocols: []string{tokenProtocol},
+			CheckOrigin:  checkOrigin(allowedOrigins),
+		},
+	}
 }
 
-var upgrader = websocket.Upgrader{
-	// O servidor precisa devolver um dos subprotocolos pedidos, senão o navegador fecha a conexão.
-	Subprotocols: []string{tokenProtocol},
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+// checkOrigin protege contra Cross-Site WebSocket Hijacking: um navegador
+// só conecta a partir de uma origem listada. Clientes que não são navegador
+// (sem header Origin) passam, pois o ataque só existe via navegador.
+func checkOrigin(allowed []string) func(*http.Request) bool {
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		for _, a := range allowed {
+			if strings.EqualFold(origin, a) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 func (h *WSHandler) Handle(c *gin.Context) {
@@ -53,7 +74,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Println("ws: upgrade:", err)
 		return

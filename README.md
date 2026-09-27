@@ -59,10 +59,20 @@ O CI roda `up → down → up` num Postgres real a cada PR.
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab?sslmode=disable"
 export REDIS_URL="redis://localhost:6379"
 export JWT_SECRET="troque-isto"
+export ALLOWED_ORIGINS="http://localhost:5173"   # origens de navegador aceitas no WebSocket
 go run ./cmd/api
 ```
 
 A API sobe em `http://localhost:8080`.
+
+## Testes
+
+```sh
+go test ./...                                    # unitários; os de integração são pulados
+TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab_test?sslmode=disable" go test ./...
+```
+
+Os testes de integração usam um banco separado (`collab_test`) com as migrations aplicadas. No CI eles rodam contra um Postgres 17 real.
 
 ## Próximos passos
 - [x] Expor a rota WebSocket `/documents/:id/ws`

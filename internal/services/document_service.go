@@ -17,7 +17,7 @@ func (s *DocumentService) Create(userID, title string) (*models.Document, error)
 		ID:        uuid.New().String(),
 		UserID:    userID,
 		Title:     title,
-		Content:   "TESTE",
+		Content:   "",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
