@@ -2,35 +2,16 @@ package repositories
 
 import (
 	"apis/internal/models"
-	"database/sql"
+	"apis/internal/testutil"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 )
 
-// testDB conecta no Postgres de teste (com as migrations aplicadas).
-// Sem TEST_DATABASE_URL o teste é pulado, para `go test` rodar em qualquer máquina.
-func testDB(t *testing.T) *sql.DB {
-	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL não definido: pulando teste de integração")
-	}
-
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	return db
-}
-
 func TestUserRepositoryCreateDuplicateEmail(t *testing.T) {
-	db := testDB(t)
+	db := testutil.DB(t)
 	repo := &UserRepository{DB: db}
 
 	email := uuid.NewString() + "@test.dev" // único por execução
