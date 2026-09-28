@@ -64,5 +64,13 @@ services:
     ports:
       - "8081:8080"
 
+  # Página de demonstração em http://localhost:5173 (origem permitida por padrão).
+  demo:
+    image: nginx:1.29-alpine
+    volumes:
+      - ./demo:/usr/share/nginx/html:ro
+    ports:
+      - "5173:80"
+
 volumes:
   pgdata:
