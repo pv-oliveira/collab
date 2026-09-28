@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Tag v* (ex.: v1.0.0) publica a imagem versionada.
+    tags: ['v*']
   # Toda segunda, 09:00 UTC: pega vulnerabilidades publicadas mesmo sem PR.
   schedule:
     - cron: "0 9 * * 1"
@@ -109,10 +111,10 @@ jobs:
       - run: docker build -t collab-api:ci .
       - run: docker compose config --quiet
 
-  # CD: só em push na main e só se todos os checks passarem (needs).
+  # CD: só em push na main ou de tag v*, e só se todos os checks passarem (needs).
   publish:
     needs: [test, lint, migrations, govulncheck, docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     # Único job que escreve: publica no GitHub Container Registry.
     permissions:
@@ -134,6 +136,8 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
       - uses: docker/build-push-action@v7
         with:
           context: .
