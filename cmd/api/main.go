@@ -30,6 +30,8 @@ func main() {
 	handler := &handlers.DocumentHandler{Service: service}
 
 	r := gin.Default()
+	// Antes de qualquer rota: o preflight (OPTIONS) chega sem token.
+	r.Use(middleware.CORS(cfg.AllowedOrigins))
 
 	authRepo := &repositories.UserRepository{DB: database}
 	authService := &services.AuthService{
