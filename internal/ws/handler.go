@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -44,15 +43,7 @@ func NewWSHandler(hub *Hub, docs *services.DocumentService, jwtSecret string, al
 func checkOrigin(allowed []string) func(*http.Request) bool {
 	return func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
-		for _, a := range allowed {
-			if strings.EqualFold(origin, a) {
-				return true
-			}
-		}
-		return false
+		return origin == "" || middleware.OriginAllowed(origin, allowed)
 	}
 }
 

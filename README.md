@@ -89,7 +89,7 @@ docker run -p 8080:8080 \
 export DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab?sslmode=disable"
 export REDIS_URL="redis://localhost:6379"
 export JWT_SECRET="troque-isto"
-export ALLOWED_ORIGINS="http://localhost:5173"   # origens de navegador aceitas no WebSocket
+export ALLOWED_ORIGINS="http://localhost:5173"   # origens de navegador aceitas (CORS e WebSocket)
 go run ./cmd/api
 ```
 
