@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>collab — demo</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e4e7ec; --accent:#2f6fec; --ok:#12a150; --warn:#d97706; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:760px; margin:0 auto; padding:24px 16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:var(--muted); }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  textarea { min-height:240px; resize:vertical; font-family:ui-monospace, monospace; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
+  .row > * { flex:1; min-width:140px; }
+  button { padding:8px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:6px; font:inherit; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  ul { list-style:none; padding:0; margin:8px 0 0; }
+  li { padding:8px 10px; border:1px solid var(--line); border-radius:6px; margin-top:6px; cursor:pointer; }
+  li:hover { border-color:var(--accent); }
+  .status { font-size:13px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--warn); margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  #msg { min-height:20px; font-size:13px; color:var(--muted); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>collab — edição em tempo real</h1>
+  <p class="sub">Abra o mesmo documento em duas réplicas da API (:8080 e :8081): o que você digita numa chega na outra pelo Redis.</p>
+
+  <section>
+    <div class="row">
+      <div><label for="api">Réplica da API</label>
+        <select id="api"><option value="8080">api-1 (:8080)</option><option value="8081">api-2 (:8081)</option></select></div>
+      <div><label for="email">E-mail</label><input id="email" type="email" autocomplete="username"></div>
+      <div><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="login">Entrar</button>
+      <button id="register" class="secondary">Criar conta</button>
+      <button id="logout" class="secondary" hidden>Sair</button>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section id="docs" hidden>
+    <div class="row">
+      <div><label for="title">Novo documento</label><input id="title" placeholder="Título"></div>
+      <div style="flex:0"><button id="create">Criar</button></div>
+    </div>
+    <ul id="list"></ul>
+  </section>
+
+  <section id="editor" hidden>
+    <div class="row" style="margin-bottom:8px">
+      <strong id="docTitle"></strong>
+      <span class="status" style="flex:0 0 auto"><span id="dot" class="dot"></span><span id="state">desconectado</span></span>
+    </div>
+    <textarea id="content" placeholder="Digite aqui…"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="save">Salvar</button>
+      <button id="other" class="secondary">Abrir na outra réplica ↗</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+if (params.get("api")) $("api").value = params.get("api");
+
+let token = localStorage.getItem("collab-token"); // compartilhado entre abas da mesma origem
+let current = null;
+let socket = null;
+
+const base = () => `http://localhost:${$("api").value}`;
+const msg = (text) => { $("msg").textContent = text; };
+
+async function api(method, path, body) {
+  const res = await fetch(base() + path, {
+    method,
+    headers: { "Content-Type": "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
+    body: body && JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+  return data;
+}
+
+async function auth(path) {
+  const credentials = { email: $("email").value, password: $("password").value };
+  try {
+    if (path === "/auth/register") await api("POST", path, credentials);
+    token = (await api("POST", "/auth/login", credentials)).token;
+    localStorage.setItem("collab-token", token);
+    await showDocs();
+  } catch (e) { msg(e.message); }
+}
+
+async function showDocs() {
+  $("docs").hidden = false;
+  $("logout").hidden = false;
+  msg(`Conectado em ${base()}`);
+  const docs = await api("GET", "/documents");
+  const items = docs.map((doc) => {
+    const li = document.createElement("li");
+    li.textContent = doc.title || "(sem título)"; // textContent: nunca interpreta HTML
+    li.onclick = () => openDoc(doc.id);
+    return li;
+  });
+  // Troca a lista inteira de uma vez, depois da resposta: duas chamadas
+  // simultâneas não acumulam itens.
+  $("list").replaceChildren(...items);
+}
+
+async function openDoc(id) {
+  current = await api("GET", `/documents/${id}`);
+  $("editor").hidden = false;
+  $("docTitle").textContent = current.title || "(sem título)";
+  $("content").value = current.content;
+  history.replaceState(null, "", `?doc=${id}&api=${$("api").value}`);
+  connect(id);
+}
+
+function connect(id) {
+  if (socket) socket.close();
+  const port = $("api").value;
+  // O token vai no subprotocolo: o navegador não permite headers no WebSocket.
+  socket = new WebSocket(`ws://localhost:${port}/documents/${id}/ws`, ["access_token", token]);
+  socket.onopen = () => setState(true, `conectado à réplica :${port}`);
+  socket.onclose = () => setState(false, "desconectado");
+  socket.onmessage = (e) => { $("content").value = e.data; }; // última edição vence
+}
+
+function setState(on, text) {
+  $("dot").classList.toggle("on", on);
+  $("state").textContent = text;
+}
+
+$("content").oninput = () => { if (socket && socket.readyState === WebSocket.OPEN) socket.send($("content").value); };
+$("login").onclick = () => auth("/auth/login");
+$("register").onclick = () => auth("/auth/register");
+$("logout").onclick = () => { localStorage.removeItem("collab-token"); location.search = ""; };
+$("create").onclick = async () => {
+  try { const doc = await api("POST", "/documents", { title: $("title").value }); $("title").value = ""; await showDocs(); openDoc(doc.id); }
+  catch (e) { msg(e.message); }
+};
+$("save").onclick = async () => {
+  try { await api("PUT", `/documents/${current.id}`, { title: current.title, content: $("content").value }); msg("Salvo."); }
+  catch (e) { msg(e.message); }
+};
+$("other").onclick = () => {
+  const other = $("api").value === "8080" ? "8081" : "8080";
+  window.open(`?doc=${current.id}&api=${other}`, "_blank");
+};
+$("api").onchange = () => { if (token) showDocs().catch((e) => msg(e.message)); };
+
+if (token) {
+  showDocs().then(() => params.get("doc") && openDoc(params.get("doc"))).catch((e) => msg(e.message));
+}
+</script>
+</body>
+</html>
