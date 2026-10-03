@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -58,11 +59,15 @@ func main() {
 		log.Fatal("REDIS_URL is required")
 	}
 	ctx := context.Background()
-	bus, err := ws.NewRedisBus(ctx, cfg.RedisURL)
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("redis: ", err)
 	}
-	hub := ws.NewHub(bus)
+	rdb := redis.NewClient(redisOpts)
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatal("redis: ", err)
+	}
+	hub := ws.NewHub(ws.NewRedisBus(rdb))
 	go func() {
 		log.Fatal("ws hub: ", hub.Run(ctx))
 	}()
