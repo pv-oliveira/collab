@@ -58,7 +58,8 @@ func main() {
 		Repo:      authRepo,
 		JWTSecret: cfg.JWTSecret,
 	}
-	authHandler := &handlers.AuthHandler{Service: authService}
+	tokens := &middleware.Tokens{Secret: cfg.JWTSecret, Redis: rdb}
+	authHandler := &handlers.AuthHandler{Service: authService, Tokens: tokens}
 
 	// Contra brute-force de senha e criação de contas em massa.
 	authLimit := middleware.RateLimit(rdb, 10, time.Minute)
@@ -67,8 +68,9 @@ func main() {
 
 	// Rotas protegidas
 	protected := r.Group("/")
-	protected.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+	protected.Use(middleware.AuthMiddleware(tokens))
 
+	protected.POST("/auth/logout", authHandler.Logout)
 	protected.POST("/documents", handler.Create)
 	protected.GET("/documents/:id", handler.Get)
 	protected.GET("/documents", handler.List)
@@ -80,7 +82,7 @@ func main() {
 	go func() {
 		log.Fatal("ws hub: ", hub.Run(ctx))
 	}()
-	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, cfg.JWTSecret, cfg.AllowedOrigins).Handle)
+	r.GET("/documents/:id/ws", ws.NewWSHandler(hub, service, tokens, cfg.AllowedOrigins).Handle)
 
 	log.Fatal(r.Run(":8080"))
 }
