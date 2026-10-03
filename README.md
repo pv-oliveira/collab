@@ -8,7 +8,7 @@
 API em Go para **edição colaborativa de documentos em tempo real**, feita para rodar com **várias réplicas**: uma edição recebida por uma instância chega aos clientes conectados em qualquer outra, via **Redis Pub/Sub**.
 
 - **Tempo real distribuído:** WebSocket + Redis Pub/Sub entre réplicas, sem eco e sem duplicação.
-- **Segurança:** JWT (só HS256), autorização por dono do documento, CORS e `CheckOrigin` por lista de origens, hash da senha nunca exposto.
+- **Segurança:** JWT (só HS256), autorização por dono do documento, rate limit no login e no cadastro (compartilhado entre réplicas), CORS e `CheckOrigin` por lista de origens, hash da senha nunca exposto.
 - **Qualidade:** 87,5% de cobertura, testes com o detector de corrida (`-race`), testes de integração com Postgres real e testes de mutação.
 - **Entrega:** Docker (imagem de ~10 MB, sem shell, não-root), `docker compose` com duas réplicas, CI com 5 checks obrigatórios e CD publicando no GitHub Container Registry.
 
@@ -88,6 +88,8 @@ Go 1.26 · Gin · PostgreSQL 17 · Redis 8 · gorilla/websocket · golang-jwt ·
 |---|---|---|---|
 | POST | `/auth/register` | — | Cria conta (`409` se o e-mail já existe) |
 | POST | `/auth/login` | — | Retorna o JWT (válido por 24h) |
+
+`/auth/register` e `/auth/login` aceitam **10 requisições por minuto por IP** (cada rota com seu contador). Acima disso: `429` com `Retry-After` em segundos.
 | POST | `/documents` | Bearer | Cria documento |
 | GET | `/documents` | Bearer | Lista os documentos do usuário |
 | GET | `/documents/:id` | Bearer | Lê um documento (`404` se não for do usuário) |
@@ -163,7 +165,7 @@ go test ./...        # unitários; os de integração são pulados
 TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab_test?sslmode=disable" go test ./...
 ```
 
-- **Unitários:** JWT, CORS, origens, serialização, configuração.
+- **Unitários:** JWT, CORS, origens, rate limit (Redis em memória), serialização, configuração.
 - **Integração** (Postgres real): repositories, services, handlers HTTP e um **WebSocket ponta a ponta** com conexões reais via `httptest.Server`.
 - **Hub distribuído:** duas instâncias ligadas ao mesmo Redis em memória (`miniredis`).
 - **Testes de mutação:** cada bug corrigido foi reintroduzido de propósito para confirmar que algum teste falha.
@@ -195,6 +197,8 @@ Em cada push na `main`, o job `publish` roda só depois dos 5 checks e publica a
 | Imagem distroless `nonroot` | ~10 MB, sem shell, mínima superfície de ataque | [#20](https://github.com/pv-oliveira/collab/pull/20) |
 | `publish` com `needs` nos 5 checks | O próprio GitHub garante que só publica com CI verde | [#21](https://github.com/pv-oliveira/collab/pull/21) |
 | CORS próprio com a mesma lista do WebSocket | Uma única regra de origens; sem dependência nova | [#24](https://github.com/pv-oliveira/collab/pull/24) |
+| Rate limit no Redis, janela fixa em `MULTI` | Vale entre réplicas; `SET NX EX` + `INCR` atômicos evitam chave sem TTL; Redis fora → deixa passar | [#28](https://github.com/pv-oliveira/collab/issues/28) |
+| `SetTrustedProxies(nil)` | Sem proxy na frente: um `X-Forwarded-For` falso não troca o IP do rate limit | [#28](https://github.com/pv-oliveira/collab/issues/28) |
 
 O histórico completo — contexto, alternativas e critérios de aceite — está nas [issues](https://github.com/pv-oliveira/collab/issues?q=is%3Aissue) e nos [PRs](https://github.com/pv-oliveira/collab/pulls?q=is%3Apr).
 
