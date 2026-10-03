@@ -13,7 +13,8 @@ func corsRouter() *gin.Engine {
 	r := gin.New()
 	r.Use(CORS([]string{"http://localhost:5173"}))
 	protected := r.Group("/")
-	protected.Use(AuthMiddleware("secret"))
+	// Sem Redis: estes testes não chegam a consultar a revogação.
+	protected.Use(AuthMiddleware(&Tokens{Secret: "secret"}))
 	protected.GET("/documents", func(c *gin.Context) { c.Status(http.StatusOK) })
 	return r
 }

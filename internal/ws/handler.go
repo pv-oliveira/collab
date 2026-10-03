@@ -18,17 +18,17 @@ import (
 const tokenProtocol = "access_token"
 
 type WSHandler struct {
-	hub       *Hub
-	docs      *services.DocumentService
-	jwtSecret string
-	upgrader  websocket.Upgrader
+	hub      *Hub
+	docs     *services.DocumentService
+	tokens   *middleware.Tokens
+	upgrader websocket.Upgrader
 }
 
-func NewWSHandler(hub *Hub, docs *services.DocumentService, jwtSecret string, allowedOrigins []string) *WSHandler {
+func NewWSHandler(hub *Hub, docs *services.DocumentService, tokens *middleware.Tokens, allowedOrigins []string) *WSHandler {
 	return &WSHandler{
-		hub:       hub,
-		docs:      docs,
-		jwtSecret: jwtSecret,
+		hub:    hub,
+		docs:   docs,
+		tokens: tokens,
 		upgrader: websocket.Upgrader{
 			// O servidor precisa devolver um dos subprotocolos pedidos, senão o navegador fecha a conexão.
 			Subprotocols: []string{tokenProtocol},
@@ -48,11 +48,19 @@ func checkOrigin(allowed []string) func(*http.Request) bool {
 }
 
 func (h *WSHandler) Handle(c *gin.Context) {
-	userID, err := middleware.ParseToken(h.jwtSecret, tokenFromSubprotocol(c.Request))
+	// Mesma verificação do HTTP (inclui a revogação), checada só no handshake:
+	// um logout não derruba conexões já abertas.
+	claims, err := h.tokens.Parse(c, tokenFromSubprotocol(c.Request))
+	if errors.Is(err, middleware.ErrRevocationUnavailable) {
+		log.Println("ws:", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "service unavailable"})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
+	userID := claims.UserID
 
 	// Só o dono do documento entra na sala (checado antes do upgrade).
 	docID := c.Param("id")

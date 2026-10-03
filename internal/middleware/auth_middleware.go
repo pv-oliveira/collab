@@ -1,13 +1,17 @@
 package middleware
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func AuthMiddleware(secret string) gin.HandlerFunc {
+// AuthMiddleware exige um Bearer válido e não revogado. Deixa no contexto
+// "userID" e "claims" (usadas pelo logout).
+func AuthMiddleware(tokens *Tokens) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.Request.Header.Get("Authorization")
 
@@ -25,14 +29,20 @@ func AuthMiddleware(secret string) gin.HandlerFunc {
 			return
 		}
 
-		userID, err := ParseToken(secret, token)
+		claims, err := tokens.Parse(c, token)
+		if errors.Is(err, ErrRevocationUnavailable) {
+			log.Println("auth:", err)
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "service unavailable"})
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			c.Abort()
 			return
 		}
 
-		c.Set("userID", userID)
+		c.Set("userID", claims.UserID)
+		c.Set("claims", claims)
 		c.Next()
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"apis/internal/repositories"
 	"apis/internal/services"
 	"apis/internal/testutil"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,13 +36,19 @@ func TestWebSocketEndToEnd(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/documents/:id/ws", NewWSHandler(startHubs(t, 1)[0], docs, e2eSecret, []string{e2eOrigin}).Handle)
+	tokens := testutil.Tokens(t, e2eSecret)
+	r.GET("/documents/:id/ws", NewWSHandler(startHubs(t, 1)[0], docs, tokens, []string{e2eOrigin}).Handle)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/documents/" + doc.ID + "/ws"
 
 	ownerToken, _ := middleware.GenerateToken(e2eSecret, owner.ID)
 	intruderToken, _ := middleware.GenerateToken(e2eSecret, intruder.ID)
+	revokedToken, _ := middleware.GenerateToken(e2eSecret, owner.ID)
+	revoked, _ := middleware.ParseToken(e2eSecret, revokedToken)
+	if err := tokens.Revoke(context.Background(), revoked); err != nil {
+		t.Fatal(err)
+	}
 
 	dial := func(token, origin string) (*websocket.Conn, *http.Response, error) {
 		d := websocket.Dialer{Subprotocols: []string{tokenProtocol, token}}
@@ -58,6 +65,7 @@ func TestWebSocketEndToEnd(t *testing.T) {
 			want                int
 		}{
 			{"sem token", "", e2eOrigin, http.StatusUnauthorized},
+			{"token revogado (logout)", revokedToken, e2eOrigin, http.StatusUnauthorized},
 			{"documento de outro usuário", intruderToken, e2eOrigin, http.StatusNotFound},
 			{"origem não permitida", ownerToken, "https://evil.com", http.StatusForbidden},
 		}

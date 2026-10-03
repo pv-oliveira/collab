@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"apis/internal/middleware"
 	"apis/internal/models"
 	"apis/internal/services"
 	"errors"
@@ -12,6 +13,7 @@ import (
 
 type AuthHandler struct {
 	Service *services.AuthService
+	Tokens  *middleware.Tokens
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -57,4 +59,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+// Logout revoga o token usado nesta requisição (rota protegida pelo
+// AuthMiddleware, que deixa as claims no contexto).
+func (h *AuthHandler) Logout(c *gin.Context) {
+	claims := c.MustGet("claims").(*middleware.Claims)
+	if err := h.Tokens.Revoke(c, claims); err != nil {
+		log.Println("logout:", err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "service unavailable"})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

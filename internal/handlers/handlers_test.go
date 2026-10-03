@@ -21,16 +21,19 @@ const secret = "test-secret"
 
 // newRouter monta as mesmas rotas do main.go com dependências reais e o
 // Postgres de teste, para exercitar a conversão erro → status HTTP.
-func newRouter(db *sql.DB) *gin.Engine {
+func newRouter(t *testing.T, db *sql.DB) *gin.Engine {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
-	auth := &AuthHandler{Service: &services.AuthService{Repo: &repositories.UserRepository{DB: db}, JWTSecret: secret}}
+	tokens := testutil.Tokens(t, secret)
+	auth := &AuthHandler{Service: &services.AuthService{Repo: &repositories.UserRepository{DB: db}, JWTSecret: secret}, Tokens: tokens}
 	docs := &DocumentHandler{Service: &services.DocumentService{Repo: &repositories.DocumentRepository{DB: db}}}
 
 	r := gin.New()
 	r.POST("/auth/register", auth.Register)
 	r.POST("/auth/login", auth.Login)
 	protected := r.Group("/")
-	protected.Use(middleware.AuthMiddleware(secret))
+	protected.Use(middleware.AuthMiddleware(tokens))
+	protected.POST("/auth/logout", auth.Logout)
 	protected.POST("/documents", docs.Create)
 	protected.GET("/documents/:id", docs.Get)
 	protected.GET("/documents", docs.List)
@@ -58,7 +61,7 @@ func do(t *testing.T, r *gin.Engine, method, path, token string, body any) *http
 
 func TestAuthHandlers(t *testing.T) {
 	db := testutil.DB(t)
-	r := newRouter(db)
+	r := newRouter(t, db)
 	email := uuid.NewString() + "@test.dev"
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM users WHERE email = $1`, email) })
 	creds := map[string]string{"email": email, "password": "s3nha"}
@@ -88,13 +91,26 @@ func TestAuthHandlers(t *testing.T) {
 	w = do(t, r, http.MethodPost, "/auth/login", "", creds)
 	var resp struct{ Token string }
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil || w.Code != http.StatusOK || resp.Token == "" {
-		t.Errorf("login: status %d, body %s", w.Code, w.Body)
+		t.Fatalf("login: status %d, body %s", w.Code, w.Body)
+	}
+
+	if w := do(t, r, http.MethodGet, "/documents", resp.Token, nil); w.Code != http.StatusOK {
+		t.Errorf("antes do logout: status %d, esperava 200", w.Code)
+	}
+	if w := do(t, r, http.MethodPost, "/auth/logout", resp.Token, nil); w.Code != http.StatusNoContent {
+		t.Errorf("logout: status %d, esperava 204 (body %s)", w.Code, w.Body)
+	}
+	if w := do(t, r, http.MethodGet, "/documents", resp.Token, nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("depois do logout: status %d, esperava 401", w.Code)
+	}
+	if w := do(t, r, http.MethodPost, "/auth/logout", resp.Token, nil); w.Code != http.StatusUnauthorized {
+		t.Errorf("logout repetido: status %d, esperava 401", w.Code)
 	}
 }
 
 func TestDocumentHandlersEnforceOwnership(t *testing.T) {
 	db := testutil.DB(t)
-	r := newRouter(db)
+	r := newRouter(t, db)
 	owner := testutil.CreateUser(t, db)
 	intruder := testutil.CreateUser(t, db)
 	ownerToken, _ := middleware.GenerateToken(secret, owner.ID)
@@ -130,7 +146,7 @@ func TestDocumentHandlersEnforceOwnership(t *testing.T) {
 
 func TestDocumentHandlersErrors(t *testing.T) {
 	db := testutil.DB(t)
-	r := newRouter(db)
+	r := newRouter(t, db)
 
 	t.Run("usuário sem documentos recebe []", func(t *testing.T) {
 		user := testutil.CreateUser(t, db)
@@ -160,7 +176,7 @@ func TestDocumentHandlersErrors(t *testing.T) {
 		t.Cleanup(func() { _ = broken.Close() })
 		token, _ := middleware.GenerateToken(secret, uuid.NewString())
 
-		w := do(t, newRouter(broken), http.MethodGet, "/documents", token, nil)
+		w := do(t, newRouter(t, broken), http.MethodGet, "/documents", token, nil)
 		if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), "internal error") {
 			t.Errorf("status %d, body %s; esperava 500 com internal error", w.Code, w.Body)
 		}

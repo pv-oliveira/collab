@@ -3,14 +3,17 @@
 package testutil
 
 import (
+	"apis/internal/middleware"
 	"apis/internal/models"
 	"database/sql"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
+	"github.com/redis/go-redis/v9"
 )
 
 // DB conecta no Postgres de teste (com as migrations aplicadas). Sem
@@ -48,4 +51,11 @@ func CreateUser(t testing.TB, db *sql.DB) *models.User {
 	}
 	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM users WHERE id = $1`, user.ID) })
 	return user
+}
+
+// Tokens devolve a verificação de JWT ligada a um Redis em memória.
+func Tokens(t testing.TB, secret string) *middleware.Tokens {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	return &middleware.Tokens{Secret: secret, Redis: redis.NewClient(&redis.Options{Addr: mr.Addr()})}
 }
