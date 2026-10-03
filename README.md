@@ -7,7 +7,7 @@
 
 API em Go para **edição colaborativa de documentos em tempo real**, feita para rodar com **várias réplicas**: uma edição recebida por uma instância chega aos clientes conectados em qualquer outra, via **Redis Pub/Sub**.
 
-- **Tempo real distribuído:** WebSocket + Redis Pub/Sub entre réplicas, sem eco e sem duplicação.
+- **Tempo real distribuído:** WebSocket + Redis Pub/Sub entre réplicas, sem eco e sem duplicação, com **autosave** (2s sem edições) gravado por uma única réplica.
 - **Segurança:** JWT (só HS256) revogável no logout, autorização por dono do documento, rate limit no login e no cadastro (compartilhado entre réplicas), CORS e `CheckOrigin` por lista de origens, hash da senha nunca exposto.
 - **Qualidade:** 87,5% de cobertura, testes com o detector de corrida (`-race`), testes de integração com Postgres real e testes de mutação.
 - **Entrega:** Docker (imagem de ~10 MB, sem shell, não-root), `docker compose` com duas réplicas, CI com 5 checks obrigatórios e CD publicando no GitHub Container Registry.
@@ -56,6 +56,8 @@ sequenceDiagram
     I2->>B: conteúdo (WebSocket)
 ```
 
+**Autosave:** toda réplica faz um debounce de 2s por documento sobre os mesmos eventos. Quando o timer vence, cada uma tenta `SET autosave:<id do último evento> NX` no Redis: só uma consegue e grava o conteúdo, sempre o mais novo, mesmo que a réplica onde o usuário digitou tenha caído.
+
 A instância **só publica no Redis** e todas — inclusive a de origem — entregam a partir da inscrição. Com um único caminho, a mensagem nunca chega duplicada. Dentro de cada instância, só a goroutine do `Hub` acessa o mapa de conexões; as demais conversam com ela por canais, sem corrida de dados.
 
 ### Código
@@ -94,7 +96,7 @@ Go 1.26 · Gin · PostgreSQL 17 · Redis 8 · gorilla/websocket · golang-jwt ·
 | POST | `/documents` | Bearer | Cria documento |
 | GET | `/documents` | Bearer | Lista os documentos do usuário |
 | GET | `/documents/:id` | Bearer | Lê um documento (`404` se não for do usuário) |
-| PUT | `/documents/:id` | Bearer | Salva título e conteúdo |
+| PUT | `/documents/:id` | Bearer | Salva título e conteúdo (o conteúdo também é salvo sozinho, 2s após a última edição pelo WebSocket) |
 | GET | `/documents/:id/ws` | subprotocolo | Canal de edição em tempo real |
 
 **WebSocket no navegador:** navegadores não permitem headers customizados no WebSocket, então o token vai no subprotocolo:
@@ -169,6 +171,7 @@ TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5432/collab_test?sslmo
 - **Unitários:** JWT e revogação, CORS, origens, rate limit (Redis em memória), serialização, configuração.
 - **Integração** (Postgres real): repositories, services, handlers HTTP e um **WebSocket ponta a ponta** com conexões reais via `httptest.Server`.
 - **Hub distribuído:** duas instâncias ligadas ao mesmo Redis em memória (`miniredis`).
+- **Autosave:** debounce, uma gravação com duas réplicas e edição via WebSocket lida no banco (e2e).
 - **Testes de mutação:** cada bug corrigido foi reintroduzido de propósito para confirmar que algum teste falha.
 
 ## CI/CD
@@ -203,6 +206,7 @@ Em cada push na `main`, o job `publish` roda só depois dos 5 checks e publica a
 | Logout por denylist do `jti` no Redis | TTL = tempo restante do token: a chave some sozinha; o JWT continua stateless | [#29](https://github.com/pv-oliveira/collab/issues/29) |
 | Verificação única (`middleware.Tokens`) para HTTP e WebSocket | Nenhum caminho esquece a checagem de revogação | [#29](https://github.com/pv-oliveira/collab/issues/29) |
 | Revogação *fail closed* (`503`), rate limit *fail open* | Sem o Redis, um token revogado voltaria a valer; já o rate limit é só defesa extra | [#29](https://github.com/pv-oliveira/collab/issues/29) |
+| Autosave: debounce em todas as réplicas + `SET NX` no id do último evento | Exatamente uma gravação, sempre do conteúdo mais novo, sem depender da réplica de origem | [#30](https://github.com/pv-oliveira/collab/issues/30) |
 
 O histórico completo — contexto, alternativas e critérios de aceite — está nas [issues](https://github.com/pv-oliveira/collab/issues?q=is%3Aissue) e nos [PRs](https://github.com/pv-oliveira/collab/pulls?q=is%3Apr).
 
