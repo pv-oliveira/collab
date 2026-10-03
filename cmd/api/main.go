@@ -10,6 +10,7 @@ import (
 	"apis/internal/ws"
 	"context"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -30,31 +31,6 @@ func main() {
 	service := &services.DocumentService{Repo: repo}
 	handler := &handlers.DocumentHandler{Service: service}
 
-	r := gin.Default()
-	// Antes de qualquer rota: o preflight (OPTIONS) chega sem token.
-	r.Use(middleware.CORS(cfg.AllowedOrigins))
-
-	authRepo := &repositories.UserRepository{DB: database}
-	authService := &services.AuthService{
-		Repo:      authRepo,
-		JWTSecret: cfg.JWTSecret,
-	}
-	authHandler := &handlers.AuthHandler{Service: authService}
-
-	r.POST("/auth/register", authHandler.Register)
-	r.POST("/auth/login", authHandler.Login)
-
-	// Rotas protegidas
-	protected := r.Group("/")
-	protected.Use(middleware.AuthMiddleware(cfg.JWTSecret))
-
-	protected.POST("/documents", handler.Create)
-	protected.GET("/documents/:id", handler.Get)
-	protected.GET("/documents", handler.List)
-	protected.PUT("/documents/:id", handler.Update)
-
-	// WebSocket: fora do grupo protegido porque o token vem no subprotocolo,
-	// e não no header Authorization (o próprio handler valida).
 	if cfg.RedisURL == "" {
 		log.Fatal("REDIS_URL is required")
 	}
@@ -67,6 +43,39 @@ func main() {
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Fatal("redis: ", err)
 	}
+
+	r := gin.Default()
+	// Sem proxy na frente: o IP vem da conexão TCP. Confiar no X-Forwarded-For
+	// deixaria o cliente escolher o IP e escapar do rate limit.
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatal(err)
+	}
+	// Antes de qualquer rota: o preflight (OPTIONS) chega sem token.
+	r.Use(middleware.CORS(cfg.AllowedOrigins))
+
+	authRepo := &repositories.UserRepository{DB: database}
+	authService := &services.AuthService{
+		Repo:      authRepo,
+		JWTSecret: cfg.JWTSecret,
+	}
+	authHandler := &handlers.AuthHandler{Service: authService}
+
+	// Contra brute-force de senha e criação de contas em massa.
+	authLimit := middleware.RateLimit(rdb, 10, time.Minute)
+	r.POST("/auth/register", authLimit, authHandler.Register)
+	r.POST("/auth/login", authLimit, authHandler.Login)
+
+	// Rotas protegidas
+	protected := r.Group("/")
+	protected.Use(middleware.AuthMiddleware(cfg.JWTSecret))
+
+	protected.POST("/documents", handler.Create)
+	protected.GET("/documents/:id", handler.Get)
+	protected.GET("/documents", handler.List)
+	protected.PUT("/documents/:id", handler.Update)
+
+	// WebSocket: fora do grupo protegido porque o token vem no subprotocolo,
+	// e não no header Authorization (o próprio handler valida).
 	hub := ws.NewHub(ws.NewRedisBus(rdb))
 	go func() {
 		log.Fatal("ws hub: ", hub.Run(ctx))
