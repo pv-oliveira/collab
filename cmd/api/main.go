@@ -78,7 +78,12 @@ func main() {
 
 	// WebSocket: fora do grupo protegido porque o token vem no subprotocolo,
 	// e não no header Authorization (o próprio handler valida).
-	hub := ws.NewHub(ws.NewRedisBus(rdb))
+	bus := ws.NewRedisBus(rdb)
+	hub := ws.NewHub(bus)
+	// Debounce em todas as réplicas; o lock no Redis faz só uma gravar.
+	if err := ws.NewAutosaver(bus, service.SaveContent, 2*time.Second).Run(ctx); err != nil {
+		log.Fatal("autosave: ", err)
+	}
 	go func() {
 		log.Fatal("ws hub: ", hub.Run(ctx))
 	}()

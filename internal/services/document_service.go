@@ -33,6 +33,12 @@ func (s *DocumentService) ListByUser(userID string) ([]*models.Document, error) 
 	return s.Repo.FindByUser(userID)
 }
 
+// SaveContent grava o conteúdo vindo do WebSocket. Sem checar o dono: o
+// acesso ao documento já foi verificado no handshake da conexão.
+func (s *DocumentService) SaveContent(docID, content string) error {
+	return s.Repo.UpdateContent(docID, content, time.Now())
+}
+
 func (s *DocumentService) Update(userID, docID, title, content string) (*models.Document, error) {
 	doc, err := s.Repo.FindByIDAndUser(docID, userID)
 	if err != nil {

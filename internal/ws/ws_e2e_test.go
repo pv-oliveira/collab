@@ -37,7 +37,14 @@ func TestWebSocketEndToEnd(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	tokens := testutil.Tokens(t, e2eSecret)
-	r.GET("/documents/:id/ws", NewWSHandler(startHubs(t, 1)[0], docs, tokens, []string{e2eOrigin}).Handle)
+	hub := startHubs(t, 1)[0]
+	saver := NewAutosaver(hub.bus, docs.SaveContent, testDelay)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := saver.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	r.GET("/documents/:id/ws", NewWSHandler(hub, docs, tokens, []string{e2eOrigin}).Handle)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/documents/" + doc.ID + "/ws"
@@ -116,6 +123,27 @@ func TestWebSocketEndToEnd(t *testing.T) {
 		_ = tab1.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 		if _, msg, err := tab1.ReadMessage(); err == nil {
 			t.Errorf("aba 1 recebeu o próprio eco: %q", msg)
+		}
+
+		// Autosave: sem clicar em Salvar, a edição chega ao banco.
+		saved, err := docs.GetByID(owner.ID, doc.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if saved.Content != "olá" {
+			t.Fatalf("conteúdo no banco %q, esperava \"olá\" salvo pelo autosave", saved.Content)
+		}
+
+		// Nova edição após a pausa: cada evento tem seu ID, então também é salva.
+		if err := tab1.WriteMessage(websocket.TextMessage, []byte("olá de novo")); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(4 * testDelay)
+		if saved, err = docs.GetByID(owner.ID, doc.ID); err != nil {
+			t.Fatal(err)
+		}
+		if saved.Content != "olá de novo" {
+			t.Errorf("segunda edição não foi salva: %q", saved.Content)
 		}
 	})
 }

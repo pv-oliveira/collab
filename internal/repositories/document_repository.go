@@ -4,6 +4,7 @@ import (
 	"apis/internal/models"
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 type DocumentRepository struct {
@@ -29,6 +30,12 @@ func (r *DocumentRepository) Update(doc *models.Document) error {
 	if err != nil {
 		fmt.Println("Error updating document:", err.Error())
 	}
+	return err
+}
+
+// UpdateContent é usado pelo autosave: só o conteúdo, sem tocar no título.
+func (r *DocumentRepository) UpdateContent(id, content string, updatedAt time.Time) error {
+	_, err := r.DB.Exec(`UPDATE documents SET content=$1, updated_at=$2 WHERE id=$3`, content, updatedAt, id)
 	return err
 }
 

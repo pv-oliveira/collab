@@ -6,6 +6,7 @@ import (
 )
 
 type Event struct {
+	ID         string `json:"id"` // único por edição: chave do lock do autosave
 	DocumentID string `json:"document_id"`
 	UserID     string `json:"user_id"`
 	SenderID   string `json:"sender_id"` // id da conexão que enviou

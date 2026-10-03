@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -29,6 +30,7 @@ func (c *WebsocketClient) ReadPump() {
 		}
 
 		c.hub.Publish(context.Background(), Event{
+			ID:         uuid.NewString(),
 			DocumentID: c.documentID,
 			UserID:     c.userID,
 			SenderID:   c.id,
