@@ -10,9 +10,11 @@ import (
 	"apis/internal/ws"
 	"context"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -29,7 +31,25 @@ func main() {
 	service := &services.DocumentService{Repo: repo}
 	handler := &handlers.DocumentHandler{Service: service}
 
+	if cfg.RedisURL == "" {
+		log.Fatal("REDIS_URL is required")
+	}
+	ctx := context.Background()
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("redis: ", err)
+	}
+	rdb := redis.NewClient(redisOpts)
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Fatal("redis: ", err)
+	}
+
 	r := gin.Default()
+	// Sem proxy na frente: o IP vem da conexão TCP. Confiar no X-Forwarded-For
+	// deixaria o cliente escolher o IP e escapar do rate limit.
+	if err := r.SetTrustedProxies(nil); err != nil {
+		log.Fatal(err)
+	}
 	// Antes de qualquer rota: o preflight (OPTIONS) chega sem token.
 	r.Use(middleware.CORS(cfg.AllowedOrigins))
 
@@ -40,8 +60,10 @@ func main() {
 	}
 	authHandler := &handlers.AuthHandler{Service: authService}
 
-	r.POST("/auth/register", authHandler.Register)
-	r.POST("/auth/login", authHandler.Login)
+	// Contra brute-force de senha e criação de contas em massa.
+	authLimit := middleware.RateLimit(rdb, 10, time.Minute)
+	r.POST("/auth/register", authLimit, authHandler.Register)
+	r.POST("/auth/login", authLimit, authHandler.Login)
 
 	// Rotas protegidas
 	protected := r.Group("/")
@@ -54,15 +76,7 @@ func main() {
 
 	// WebSocket: fora do grupo protegido porque o token vem no subprotocolo,
 	// e não no header Authorization (o próprio handler valida).
-	if cfg.RedisURL == "" {
-		log.Fatal("REDIS_URL is required")
-	}
-	ctx := context.Background()
-	bus, err := ws.NewRedisBus(ctx, cfg.RedisURL)
-	if err != nil {
-		log.Fatal("redis: ", err)
-	}
-	hub := ws.NewHub(bus)
+	hub := ws.NewHub(ws.NewRedisBus(rdb))
 	go func() {
 		log.Fatal("ws hub: ", hub.Run(ctx))
 	}()

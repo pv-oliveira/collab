@@ -15,18 +15,9 @@ type RedisBus struct {
 	client *redis.Client
 }
 
-func NewRedisBus(ctx context.Context, url string) (*RedisBus, error) {
-	opts, err := redis.ParseURL(url)
-	if err != nil {
-		return nil, err
-	}
-
-	client := redis.NewClient(opts)
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, err
-	}
-
-	return &RedisBus{client: client}, nil
+// NewRedisBus recebe o client já conectado: o mesmo é usado pelo rate limit.
+func NewRedisBus(client *redis.Client) *RedisBus {
+	return &RedisBus{client: client}
 }
 
 func (r *RedisBus) Publish(ctx context.Context, event Event) error {

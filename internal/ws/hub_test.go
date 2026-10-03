@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 // startHubs sobe n instâncias do hub ligadas ao mesmo Redis em memória,
@@ -18,11 +19,8 @@ func startHubs(t *testing.T, n int) []*Hub {
 
 	hubs := make([]*Hub, n)
 	for i := range hubs {
-		bus, err := NewRedisBus(ctx, "redis://"+mr.Addr())
-		if err != nil {
-			t.Fatal(err)
-		}
-		hubs[i] = NewHub(bus)
+		// Um client por hub, como réplicas separadas.
+		hubs[i] = NewHub(NewRedisBus(redis.NewClient(&redis.Options{Addr: mr.Addr()})))
 		go func(h *Hub) { _ = h.Run(ctx) }(hubs[i])
 	}
 	// Run inscreve no Redis antes de entrar no loop; register só é lido depois disso.
